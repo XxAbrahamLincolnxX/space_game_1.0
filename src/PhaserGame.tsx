@@ -2,7 +2,11 @@ import Phaser from 'phaser';
 import { useEffect } from 'react';
 import FusionScene from './game/scenes/FusionScene';
 
-export function PhaserGame() {
+interface PhaserGameProps {
+  onFusion: () => void;
+}
+
+export function PhaserGame({ onFusion }: PhaserGameProps) {
   useEffect(() => {
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.AUTO,
@@ -15,13 +19,25 @@ export function PhaserGame() {
           debug: false,
         },
       },
-      scene: [FusionScene], // ✅ This should NOT include MainMenu
+      scene: [FusionScene],
       parent: 'phaser-container',
     };
 
     const game = new Phaser.Game(config);
-    return () => game.destroy(true);
-  }, []);
+
+    // ✅ Safe: Listen for when the FusionScene is ready, then hook into its events
+    const handleSceneReady = (sceneKey: string) => {
+      const fusionScene = game.scene.getScene(sceneKey);
+      fusionScene.events.on('fusionTriggered', onFusion);
+    };
+
+    game.events.on('fusionSceneReady', handleSceneReady);
+
+    return () => {
+      game.events.off('fusionSceneReady', handleSceneReady);
+      game.destroy(true);
+    };
+  }, [onFusion]);
 
   return <div id="phaser-container" />;
 }

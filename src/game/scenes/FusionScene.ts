@@ -1,5 +1,9 @@
 import Phaser from 'phaser';
 
+const ATOM_IMAGE = 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/particles/red.png';
+const PARTICLE_IMAGE = 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/particles/blue.png';
+
+
 export default class FusionScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Image;
   particles!: Phaser.Physics.Arcade.Group;
@@ -8,9 +12,10 @@ export default class FusionScene extends Phaser.Scene {
 
 
   preload() {
-    this.load.image('atom', 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Hydrogen_atom.svg/1024px-Hydrogen_atom.svg.png');
-    this.load.image('particle', 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Yellow_circle.svg/120px-Yellow_circle.svg.png');
+    this.load.image('atom', ATOM_IMAGE);
+    this.load.image('particle', PARTICLE_IMAGE);    
   }
+  
 
   create() {
     // Use Arcade physics explicitly
@@ -51,6 +56,14 @@ export default class FusionScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-S', () => this.player.setVelocityY(200));
     this.input.keyboard?.on('keydown-A', () => this.player.setVelocityX(-200));
     this.input.keyboard?.on('keydown-D', () => this.player.setVelocityX(200));
+
+    this.scene.get('FusionScene').events.once('create', () => {
+        this.events.emit('sceneReady');
+      });
+
+        // 🔥 Let parent know we're ready (safe to access `events`)
+    this.game.events.emit('fusionSceneReady', this.scene.key);
+      
   }
 
   absorb = (
