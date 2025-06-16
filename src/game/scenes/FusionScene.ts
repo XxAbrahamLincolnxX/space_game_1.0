@@ -1,29 +1,29 @@
 import Phaser from 'phaser';
 
+// Online placeholders — you can swap these out later
 const ATOM_IMAGE = 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/particles/red.png';
 const PARTICLE_IMAGE = 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/particles/blue.png';
-
 
 export default class FusionScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Image;
   particles!: Phaser.Physics.Arcade.Group;
-  mass: number = 0;
-  fusionThreshold: number = 10;
 
+  mass: number = 1.00784; // Start at Hydrogen's atomic mass
+  readonly MASS_UNIT = 1.00784;
+  fusionThreshold: number = 10;
 
   preload() {
     this.load.image('atom', ATOM_IMAGE);
-    this.load.image('particle', PARTICLE_IMAGE);    
+    this.load.image('particle', PARTICLE_IMAGE);
   }
-  
 
   create() {
-    // Use Arcade physics explicitly
+    // Create player
     this.player = this.physics.add.image(400, 300, 'atom')
       .setDisplaySize(64, 64)
       .setCollideWorldBounds(true);
 
-    // Setup particles with physics
+    // Create scattered particles
     this.particles = this.physics.add.group({
       key: 'particle',
       repeat: 10,
@@ -39,10 +39,10 @@ export default class FusionScene extends Phaser.Scene {
       );
       particle.setCollideWorldBounds(true);
       particle.setDisplaySize(24, 24);
-      return true; // Fixes TS error about return type
+      return true;
     });
 
-    // Add overlap with proper type annotations
+    // Collision: atom absorbs particles
     this.physics.add.overlap(
       this.player,
       this.particles,
@@ -51,19 +51,19 @@ export default class FusionScene extends Phaser.Scene {
       this
     );
 
-    // WASD movement
+    // Movement controls (WASD)
     this.input.keyboard?.on('keydown-W', () => this.player.setVelocityY(-200));
     this.input.keyboard?.on('keydown-S', () => this.player.setVelocityY(200));
     this.input.keyboard?.on('keydown-A', () => this.player.setVelocityX(-200));
     this.input.keyboard?.on('keydown-D', () => this.player.setVelocityX(200));
 
-    this.scene.get('FusionScene').events.once('create', () => {
-        this.events.emit('sceneReady');
-      });
-
-        // 🔥 Let parent know we're ready (safe to access `events`)
+    // Let PhaserGame.tsx know we're ready
     this.game.events.emit('fusionSceneReady', this.scene.key);
-      
+
+    console.debug('Creating player and particles...');
+    console.debug('Player created:', this.player);
+    console.debug('Particle count:', this.particles.getChildren().length);
+
   }
 
   absorb = (
@@ -71,18 +71,20 @@ export default class FusionScene extends Phaser.Scene {
     particle: Phaser.GameObjects.GameObject
   ) => {
     particle.destroy();
-    this.mass += 1;
-    this.events.emit('massUpdated', this.mass);
-  
+
+    this.mass += this.MASS_UNIT;
+    this.game.events.emit('massUpdated', this.mass);
+
     if (this.mass >= this.fusionThreshold) {
-      this.mass = 0;
+      this.mass = this.MASS_UNIT; // Reset for demo; later trigger fusion
       this.events.emit('fusionTriggered');
     }
   };
-  
 
   update() {
     if (!this.player.body) return;
+
+    // Gradual slowdown
     this.player.setVelocity(
       this.player.body.velocity.x * 0.9,
       this.player.body.velocity.y * 0.9
