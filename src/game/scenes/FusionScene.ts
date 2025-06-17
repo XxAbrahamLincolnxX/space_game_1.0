@@ -1,49 +1,50 @@
 import Phaser from 'phaser';
 
-const ATOM_IMAGE = 'public/assets/atom.png';
-const PARTICLE_IMAGE = 'public/assets/particle.png';
+const ATOM_IMAGE = 'atom';
+const PARTICLE_IMAGE = 'particle';
 
 export default class FusionScene extends Phaser.Scene {
-  player!: Phaser.Physics.Arcade.Image;
-  particles!: Phaser.Physics.Arcade.Group;
-
-  mass: number = 1.00784;
-  readonly MASS_UNIT = 1.00784;
-  fusionThreshold: number = 10;
-
-  cursors!: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
+  private player!: Phaser.Physics.Arcade.Image;
+  private particles!: Phaser.Physics.Arcade.Group;
+  private cursors!: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
+  private mass: number = 1.00784;
+  private readonly MASS_UNIT = 1.00784;
+  private fusionThreshold: number = 10;
+  private fusionReady: boolean = true;
 
   preload() {
-    this.load.image('atom', ATOM_IMAGE);
-    this.load.image('particle', PARTICLE_IMAGE);
+    this.load.image(ATOM_IMAGE, 'assets/atom.png');
+    this.load.image(PARTICLE_IMAGE, 'assets/particle.png');
   }
 
   create() {
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
 
-    // Create and center the atom
-    this.player = this.physics.add.image(centerX, centerY, 'atom');
-    this.player.setCollideWorldBounds(true);
+    // Create player (atom) at center
+    this.player = this.physics.add.image(centerX, centerY, ATOM_IMAGE)
+      .setDisplaySize(48, 48) // shrink visually
+      .setCollideWorldBounds(true)
+      .setDamping(true)
+      .setDrag(0.95)
+      .setMaxVelocity(200);
 
-    // Create particles near the center
+    // Create particles randomly near center
     this.particles = this.physics.add.group();
-
-    for (let i = 0; i < 5; i++) {
-      const offsetX = Phaser.Math.Between(-50, 50);
-      const offsetY = Phaser.Math.Between(-50, 50);
-      const particle = this.particles.create(centerX + offsetX, centerY + offsetY, 'particle') as Phaser.Physics.Arcade.Image;
-
-      particle.setBounce(1);
-      particle.setVelocity(
-        Phaser.Math.Between(-100, 100),
-        Phaser.Math.Between(-100, 100)
-      );
-      particle.setCollideWorldBounds(true);
-      particle.setDisplaySize(24, 24);
+    for (let i = 0; i < 10; i++) {
+      const offsetX = Phaser.Math.Between(-150, 150);
+      const offsetY = Phaser.Math.Between(-150, 150);
+      const particle = this.particles.create(centerX + offsetX, centerY + offsetY, PARTICLE_IMAGE) as Phaser.Physics.Arcade.Image;
+      particle.setDisplaySize(24, 24)
+              .setBounce(1)
+              .setCollideWorldBounds(true)
+              .setVelocity(
+                Phaser.Math.Between(-100, 100),
+                Phaser.Math.Between(-100, 100)
+              );
     }
 
-    // Handle overlap between player and particles
+    // Handle collisions between atom and particles
     this.physics.add.overlap(
       this.player,
       this.particles,
@@ -52,7 +53,7 @@ export default class FusionScene extends Phaser.Scene {
       this
     );
 
-    // WASD controls
+    // WASD movement setup
     this.cursors = this.input.keyboard.addKeys({
       up: 'W',
       down: 'S',
@@ -61,11 +62,6 @@ export default class FusionScene extends Phaser.Scene {
     }) as Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
 
     this.game.events.emit('fusionSceneReady', this.scene.key);
-
-    // Debugging
-    console.debug('FusionScene initialized');
-    console.debug('Player created at', this.player.x, this.player.y);
-    console.debug('Particles:', this.particles.getChildren().length);
   }
 
   absorb = (
@@ -76,11 +72,15 @@ export default class FusionScene extends Phaser.Scene {
     this.mass += this.MASS_UNIT;
     this.game.events.emit('massUpdated', this.mass);
 
-    if (this.mass >= this.fusionThreshold) {
-      this.mass = this.MASS_UNIT;
+    if (this.mass >= this.fusionThreshold && this.fusionReady) {
+      this.fusionReady = false;
       this.events.emit('fusionTriggered');
     }
   };
+
+  resetFusion() {
+    this.fusionReady = true;
+  }
 
   update() {
     if (!this.player?.body) return;
@@ -95,6 +95,7 @@ export default class FusionScene extends Phaser.Scene {
     if (this.cursors.left.isDown) vx = -speed;
     else if (this.cursors.right.isDown) vx = speed;
 
+    // Normalize diagonal motion
     if (vx !== 0 && vy !== 0) {
       const factor = Math.SQRT1_2;
       vx *= factor;
