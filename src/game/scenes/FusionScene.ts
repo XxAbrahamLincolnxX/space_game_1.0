@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import MassManager from '../systems/MassManager';
 
 const ATOM_IMAGE = 'atom';
 const PARTICLE_IMAGE = 'particle';
@@ -6,11 +7,15 @@ const PARTICLE_IMAGE = 'particle';
 export default class FusionScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Image;
   private particles!: Phaser.Physics.Arcade.Group;
-  private cursors!: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
-  private mass: number = 1.00784;
-  private readonly MASS_UNIT = 1.00784;
-  private fusionThreshold: number = 10;
-  private fusionReady: boolean = true;
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private wasd!: {
+    up: Phaser.Input.Keyboard.Key;
+    down: Phaser.Input.Keyboard.Key;
+    left: Phaser.Input.Keyboard.Key;
+    right: Phaser.Input.Keyboard.Key;
+  };
+  private massManager!: MassManager;
+  private massText!: Phaser.GameObjects.Text;
 
   preload() {
     this.load.image(ATOM_IMAGE, 'assets/atom.png');
@@ -18,154 +23,96 @@ export default class FusionScene extends Phaser.Scene {
   }
 
   create() {
+    this.massManager = new MassManager();
+
     const centerX = this.scale.width / 2;
     const centerY = this.scale.height / 2;
 
-    // Create player (atom) at center
+    // Create player
     this.player = this.physics.add.image(centerX, centerY, ATOM_IMAGE)
-      .setDisplaySize(48, 48) // shrink visually
-      .setCollideWorldBounds(true)
-      .setDamping(true)
-      .setDrag(0.95)
-      .setMaxVelocity(200);
+      .setScale(0.2)
+      .setCollideWorldBounds(true);
 
-    // Create particles group
-    this.particles = this.physics.add.group();
+    // Correct circular physics body after scaling
+    const atomRadius = (this.textures.get(ATOM_IMAGE).getSourceImage().width * 0.2) / 2;
+    this.player.setCircle(atomRadius, this.player.width / 2 - atomRadius, this.player.height / 2 - atomRadius);
+    (this.player.body as Phaser.Physics.Arcade.Body).debugShowBody = true;
 
-    // Initial burst near center
-    for (let i = 0; i < 10; i++) {
-      const offsetX = Phaser.Math.Between(-150, 150);
-      const offsetY = Phaser.Math.Between(-150, 150);
-      const particle = this.particles.create(centerX + offsetX, centerY + offsetY, PARTICLE_IMAGE) as Phaser.Physics.Arcade.Image;
-      particle.setDisplaySize(24, 24)
-              .setBounce(1)
-              .setCollideWorldBounds(true)
-              .setVelocity(
-                Phaser.Math.Between(-100, 100),
-                Phaser.Math.Between(-100, 100)
-              );
-    }
+    this.cursors = this.input.keyboard.createCursorKeys();
 
-    // Handle collisions between atom and particles
-    this.physics.add.overlap(
-      this.player,
-      this.particles,
-      this.absorb as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
-      undefined,
-      this
-    );
+    this.wasd = {
+      up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+      down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+      left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+      right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
+    };
 
-    // WASD movement setup
-    this.cursors = this.input.keyboard.addKeys({
-      up: 'W',
-      down: 'S',
-      left: 'A',
-      right: 'D',
-    }) as Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
-
-    // Periodically spawn new drifting particles from offscreen
-    this.time.addEvent({
-      delay: 100, // every 300ms
-      loop: true,
-      callback: () => this.spawnEdgeParticle()
+    // Particle Group
+    this.particles = this.physics.add.group({
+      key: PARTICLE_IMAGE,
+      repeat: 10,
+      setXY: { x: 100, y: 100, stepX: 80, stepY: 60 }
     });
 
-    this.game.events.emit('fusionSceneReady', this.scene.key);
-  }
+    this.particles.children.iterate(child => {
+      const p = child as Phaser.Physics.Arcade.Image & { massValue?: number };
+      p.massValue = Phaser.Math.FloatBetween(1e8, 1e10);
+      p.setScale(0.05);
 
-  private spawnEdgeParticle() {
-    const buffer = 50;
-    const w = this.scale.width;
-    const h = this.scale.height;
+      const textureWidth = this.textures.get(PARTICLE_IMAGE).getSourceImage().width;
+      const particleRadius = (textureWidth * 0.05) / 2;
+      p.setCircle(particleRadius, p.width / 2 - particleRadius, p.height / 2 - particleRadius);
 
-    const side = Phaser.Math.Between(0, 3); // 0=left, 1=top, 2=right, 3=bottom
-    let x = 0, y = 0, angle = 0;
+      p.setVelocity(Phaser.Math.Between(-30, 30), Phaser.Math.Between(-30, 30));
+      p.setBounce(1);
+      p.setCollideWorldBounds(true);
 
-    switch (side) {
-      case 0: // Left
-        x = -buffer;
-        y = Phaser.Math.Between(0, h);
-        angle = Phaser.Math.FloatBetween(-0.25, 0.25);
-        break;
-      case 1: // Top
-        x = Phaser.Math.Between(0, w);
-        y = -buffer;
-        angle = Phaser.Math.FloatBetween(0.75, 1.25);
-        break;
-      case 2: // Right
-        x = w + buffer;
-        y = Phaser.Math.Between(0, h);
-        angle = Phaser.Math.FloatBetween(0.75, 1.25) + Math.PI;
-        break;
-      case 3: // Bottom
-        x = Phaser.Math.Between(0, w);
-        y = h + buffer;
-        angle = Phaser.Math.FloatBetween(1.75, 2.25);
-        break;
-    }
+      (p.body as Phaser.Physics.Arcade.Body).debugShowBody = true;
+    });
 
-    const vx = Math.cos(angle * Math.PI) * 100;
-    const vy = Math.sin(angle * Math.PI) * 100;
+    this.physics.add.overlap(this.player, this.particles, this.absorbParticle, undefined, this);
 
-    const particle = this.particles.create(x, y, PARTICLE_IMAGE) as Phaser.Physics.Arcade.Image;
-    particle.setDisplaySize(24, 24)
-            .setVelocity(vx, vy)
-            .setBounce(0)
-            .setCollideWorldBounds(false);
+    // Mass HUD
+    this.massText = this.add.text(10, 10, '', {
+      fontSize: '14px',
+      fontFamily: 'monospace',
+      color: '#ffffff',
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      padding: { x: 8, y: 4 }
+    });
 
-   
-  }
-
-  absorb = (
-    player: Phaser.GameObjects.GameObject,
-    particle: Phaser.GameObjects.GameObject
-  ) => {
-    particle.destroy();
-    this.mass += this.MASS_UNIT;
-    this.game.events.emit('massUpdated', this.mass);
-
-    if (this.mass >= this.fusionThreshold && this.fusionReady) {
-      this.fusionReady = false;
-      this.events.emit('fusionTriggered');
-    }
-  };
-
-  resetFusion() {
-    this.fusionReady = true;
+    this.updateMassText();
   }
 
   update() {
-    if (!this.player?.body) return;
+    const speed = 200;
+    this.player.setVelocity(0);
 
-    const speed = 600;
-    let vx = 0;
-    let vy = 0;
+    const left = this.cursors.left.isDown || this.wasd.left.isDown;
+    const right = this.cursors.right.isDown || this.wasd.right.isDown;
+    const up = this.cursors.up.isDown || this.wasd.up.isDown;
+    const down = this.cursors.down.isDown || this.wasd.down.isDown;
 
-    if (this.cursors.up.isDown) vy = -speed;
-    else if (this.cursors.down.isDown) vy = speed;
+    if (left) this.player.setVelocityX(-speed);
+    else if (right) this.player.setVelocityX(speed);
+    if (up) this.player.setVelocityY(-speed);
+    else if (down) this.player.setVelocityY(speed);
+  }
 
-    if (this.cursors.left.isDown) vx = -speed;
-    else if (this.cursors.right.isDown) vx = speed;
+  private absorbParticle(player: Phaser.GameObjects.GameObject, particle: Phaser.GameObjects.GameObject) {
+    const p = particle as Phaser.Physics.Arcade.Image & { massValue?: number };
 
-    // Normalize diagonal motion
-    if (vx !== 0 && vy !== 0) {
-      const factor = Math.SQRT1_2;
-      vx *= factor;
-      vy *= factor;
-    }
-    this.particles.getChildren().forEach((particle) => {
-        const p = particle as Phaser.Physics.Arcade.Image;
-        const buffer = 50;
-      
-        if (
-          p.x < -buffer || p.x > this.scale.width + buffer ||
-          p.y < -buffer || p.y > this.scale.height + buffer
-        ) {
-          p.destroy();
-        }
-      });
-      
+    console.log('Absorbing particle:', p.massValue); // debug
+    const gain = (p.massValue || 1e9) * 1.00784;
 
-    this.player.setVelocity(vx, vy);
+    this.massManager.addMass(gain);
+    this.updateMassText();
+
+    p.destroy();
+  }
+
+  private updateMassText() {
+    const mass = this.massManager.getMass();
+    this.massText.setText(`Mass: ${mass.toPrecision(6)} u`);
   }
 }

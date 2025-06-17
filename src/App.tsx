@@ -52,11 +52,7 @@ export default function App() {
                         onMassChange={(value) => setMass(parseFloat(value.toFixed(2)))}
                     />
 
-                    {/* Mass Counter HUD */}
-                    <div className="absolute top-4 left-4 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded shadow text-sm font-mono z-20">
-                        <span className="opacity-70">Mass:</span>{' '}
-                        <span className="font-bold">{mass} u</span>
-                    </div>
+                 
                 </>
             )}
 
