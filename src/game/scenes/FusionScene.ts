@@ -1,16 +1,13 @@
 import Phaser from 'phaser';
 
-// Online placeholders — you can swap these out later
-const ATOM_IMAGE =
-  'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/particles/red.png';
-const PARTICLE_IMAGE =
-  'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/particles/blue.png';
+const ATOM_IMAGE = 'public/assets/atom.png';
+const PARTICLE_IMAGE = 'public/assets/particle.png';
 
 export default class FusionScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Image;
   particles!: Phaser.Physics.Arcade.Group;
 
-  mass: number = 1.00784; // Start at Hydrogen's atomic mass
+  mass: number = 1.00784;
   readonly MASS_UNIT = 1.00784;
   fusionThreshold: number = 10;
 
@@ -22,21 +19,21 @@ export default class FusionScene extends Phaser.Scene {
   }
 
   create() {
-    // Create player
-    this.player = this.physics.add
-      .image(400, 300, 'atom')
-      .setDisplaySize(64, 64)
-      .setCollideWorldBounds(true);
+    const centerX = this.scale.width / 2;
+    const centerY = this.scale.height / 2;
 
-    // Create scattered particles
-    this.particles = this.physics.add.group({
-      key: 'particle',
-      repeat: 10,
-      setXY: { x: 50, y: 50, stepX: 60 },
-    });
+    // Create and center the atom
+    this.player = this.physics.add.image(centerX, centerY, 'atom');
+    this.player.setCollideWorldBounds(true);
 
-    this.particles.children.iterate((child) => {
-      const particle = child as Phaser.Physics.Arcade.Image;
+    // Create particles near the center
+    this.particles = this.physics.add.group();
+
+    for (let i = 0; i < 5; i++) {
+      const offsetX = Phaser.Math.Between(-50, 50);
+      const offsetY = Phaser.Math.Between(-50, 50);
+      const particle = this.particles.create(centerX + offsetX, centerY + offsetY, 'particle') as Phaser.Physics.Arcade.Image;
+
       particle.setBounce(1);
       particle.setVelocity(
         Phaser.Math.Between(-100, 100),
@@ -44,10 +41,9 @@ export default class FusionScene extends Phaser.Scene {
       );
       particle.setCollideWorldBounds(true);
       particle.setDisplaySize(24, 24);
-      return true;
-    });
+    }
 
-    // Collision: atom absorbs particles
+    // Handle overlap between player and particles
     this.physics.add.overlap(
       this.player,
       this.particles,
@@ -56,19 +52,17 @@ export default class FusionScene extends Phaser.Scene {
       this
     );
 
-    // Set up smooth WASD controls
+    // WASD controls
     this.cursors = this.input.keyboard.addKeys({
-        up: 'W',
-        down: 'S',
-        left: 'A',
-        right: 'D',
-      }) as Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
-      
+      up: 'W',
+      down: 'S',
+      left: 'A',
+      right: 'D',
+    }) as Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
 
-    // Notify the app that the scene is ready
     this.game.events.emit('fusionSceneReady', this.scene.key);
 
-    // Debug info
+    // Debugging
     console.debug('FusionScene initialized');
     console.debug('Player created at', this.player.x, this.player.y);
     console.debug('Particles:', this.particles.getChildren().length);
@@ -79,18 +73,17 @@ export default class FusionScene extends Phaser.Scene {
     particle: Phaser.GameObjects.GameObject
   ) => {
     particle.destroy();
-
     this.mass += this.MASS_UNIT;
     this.game.events.emit('massUpdated', this.mass);
 
     if (this.mass >= this.fusionThreshold) {
-      this.mass = this.MASS_UNIT; // Reset for demo; later evolve atom
+      this.mass = this.MASS_UNIT;
       this.events.emit('fusionTriggered');
     }
   };
 
   update() {
-    if (!this.player.body) return;
+    if (!this.player?.body) return;
 
     const speed = 200;
     let vx = 0;
@@ -102,7 +95,6 @@ export default class FusionScene extends Phaser.Scene {
     if (this.cursors.left.isDown) vx = -speed;
     else if (this.cursors.right.isDown) vx = speed;
 
-    // Normalize diagonal speed
     if (vx !== 0 && vy !== 0) {
       const factor = Math.SQRT1_2;
       vx *= factor;
