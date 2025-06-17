@@ -9,7 +9,9 @@ export default function App() {
     return (
         <div className="w-screen h-screen bg-black text-white">
             {/* Centered content */}
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center align-middle justify-center h-full bg-amber-600">
+                <div>
+            <h1 className='text-5xl'>Rogue Atom - Becoming Celestial</h1>
                 {/* Start Button */}
                 {phase === 'start' && (
                     <button
@@ -19,6 +21,8 @@ export default function App() {
                         START
                     </button>
                 )}
+
+                </div>
 
                 {/* Choose Atom */}
                 {phase === 'choose' && (
